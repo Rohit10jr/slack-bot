@@ -19,6 +19,64 @@ client = slack.WebClient(token=os.environ['SLACK_TOKEN'])
 BOT_ID = client.api_call("auth.test")['user_id']
 
 message_counts = {}
+welcome_messages = {}
+
+class WelcomeMessage:
+    START_TEXT = {
+        'type' : 'section',
+        'text':{
+            'type':'mrkdwn',
+            'text':(
+                'welcome to this awesome channel \n\n'
+                '*Get started by completing tasks*'
+            )
+        }
+    }
+    
+    DIVIDER = {'type': 'divider'}
+
+    def __init__(self, channel, user):
+        self.channel = channel
+        self.user = user
+        self.icon_emoji = ':robot_face'
+        self.timestamp = ''
+        self.completed = False
+
+    def get_message(self):
+        return {
+            'ts': self.timestamp,
+            'channel': self.channel,
+            'username': 'welcome Robot!',
+            'icon_emoji': self.icon_emoji,
+            'blocks':[
+                self.START_TEXT,
+                self.DIVIDER,
+                self._get_reaction_task()
+            ]
+
+        }
+    
+    def _get_reaction_task(self):
+        checkmark = ':white_check_mark:'
+        if not self.completed:
+            checkmark = ':white_large_box:'
+
+        text = f'{checkmark} *React to this message!*'
+
+        return {'type':'section', 'text':{'type':'mrkdwn', 'text':text}}
+    
+def send_welcome_message(channel, user):
+    welcome = WelcomeMessage(channel, user)
+    message = welcome.get_message()
+    response = client.chat_postMessage(**message)
+    welcome.timestamp = response['ts']
+
+    if channel not in welcome_messages:
+        welcome_messages[channel] = {}
+    welcome_messages[channel][user] = welcome
+
+
+
 
 @slack_event_adapter.on('message')
 def message(payload):
@@ -29,14 +87,15 @@ def message(payload):
     text = event.get('text')
 
     # if user_id != None and BOT_ID != user_id:
-    if user_id == BOT_ID:
-        return
-    else:
+    if user_id != None and BOT_ID != user_id:
         if user_id in message_counts:
-            message_counts[user_id] +=1
+            message_counts[user_id] += 1
         else:
-            message_counts[user_id] =  1
-        client.chat_postMessage(channel=channel_id, text=text)
+            message_counts[user_id] = 1
+
+        if text.lower() == 'start':
+            send_welcome_message(f'@{user_id}', user_id)
+        # client.chat_postMessage(channel=channel_id, text=text)
 
 # @app.route('/message-count/', methods=['GET','POST'])
 @app.route('/message-count/', methods=['POST'])
